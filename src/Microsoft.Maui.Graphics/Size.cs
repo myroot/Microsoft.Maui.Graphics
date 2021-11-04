@@ -2,10 +2,12 @@ using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
+using System.Numerics;
 
 namespace Microsoft.Maui.Graphics
 {
 	[DebuggerDisplay("Width={Width}, Height={Height}")]
+	[TypeConverter(typeof(Converters.SizeTypeConverter))]
 	public partial struct Size
 	{
 		double _width;
@@ -29,6 +31,16 @@ namespace Microsoft.Maui.Graphics
 				throw new ArgumentException("NaN is not a valid value for height");
 			_width = width;
 			_height = height;
+		}
+
+		public Size(Vector2 vector)
+		{
+			if (float.IsNaN(vector.X))
+				throw new ArgumentException("NaN is not a valid value for X");
+			if (float.IsNaN(vector.Y))
+				throw new ArgumentException("NaN is not a valid value for Y");
+			_width = vector.X;
+			_height = vector.Y;
 		}
 
 		public bool IsZero => _width == 0 && _height == 0;
@@ -118,5 +130,23 @@ namespace Microsoft.Maui.Graphics
 			height = Height;
 		}
 		public static implicit operator SizeF(Size s) => new SizeF((float)s.Width,(float)s.Height);
+
+		public static bool TryParse(string value, out Size size)
+		{
+			if (!string.IsNullOrEmpty(value))
+			{
+				string[] wh = value.Split(',');
+				if (wh.Length == 2
+					&& double.TryParse(wh[0], NumberStyles.Number, CultureInfo.InvariantCulture, out double w)
+					&& double.TryParse(wh[1], NumberStyles.Number, CultureInfo.InvariantCulture, out double h))
+				{
+					size = new Size(w, h);
+					return true;
+				}
+			}
+
+			size = default;
+			return false;
+		}
 	}
 }

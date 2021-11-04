@@ -14,6 +14,8 @@ using AlphaMode = SharpDX.Direct2D1.AlphaMode;
 using TextAntialiasMode = SharpDX.Direct2D1.TextAntialiasMode;
 using System;
 
+using NumericsMatrix3x2 = System.Numerics.Matrix3x2;
+
 namespace Microsoft.Maui.Graphics.SharpDX
 {
 	public class DXCanvas : AbstractCanvas<DXCanvasState>, IBlurrableCanvas
@@ -438,6 +440,14 @@ namespace Microsoft.Maui.Graphics.SharpDX
 			CurrentState.ClipRectangle(x, y, width, height);
 		}
 
+		public override void SubtractFromClip(EWPath path, float ppu)
+		{    
+			if (path == null)        
+				return;        
+			
+			CurrentState.SubtractFromClip(path, ppu);
+		}
+
 		public override void SubtractFromClip(float x, float y, float width, float height)
 		{
 			CurrentState.SubtractFromClip(x, y, width, height);
@@ -746,7 +756,7 @@ namespace Microsoft.Maui.Graphics.SharpDX
 			_renderTarget.Transform = CurrentState.DxTranslate(tx, ty);
 		}
 
-		protected override void NativeConcatenateTransform(AffineTransform transform)
+		protected override void NativeConcatenateTransform(NumericsMatrix3x2 transform)
 		{
 			_renderTarget.Transform = CurrentState.DxConcatenateTransform(transform);
 		}

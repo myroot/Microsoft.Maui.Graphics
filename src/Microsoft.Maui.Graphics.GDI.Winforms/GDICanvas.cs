@@ -4,6 +4,7 @@ using Drawing = System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
 using Microsoft.Maui.Graphics.Text;
+using System.Numerics;
 
 namespace Microsoft.Maui.Graphics.GDI
 {
@@ -238,25 +239,23 @@ namespace Microsoft.Maui.Graphics.GDI
 
 		protected override void NativeDrawRoundedRectangle(float x, float y, float width, float height, float cornerRadius)
 		{
-			var strokeWidth = CurrentState.StrokeWidth;
+			if (cornerRadius == 0)
+			{
+				NativeDrawRectangle(x, y, width, height);
+				return;
+			}
 
 			SetRect(x, y, width, height);
 
-			if (cornerRadius > _rect.Width / 2)
-			{
-				cornerRadius = _rect.Width / 2;
-			}
-
-			if (cornerRadius > _rect.Height / 2)
-			{
-				cornerRadius = _rect.Height / 2;
-			}
+			float minEdgeLength = Math.Min(_rect.Width, _rect.Height);
+			cornerRadius = Math.Min(cornerRadius, minEdgeLength / 2);
+			float cornerDiameter = cornerRadius * 2;
 
 			var path = new GraphicsPath();
-			path.AddArc(_rect.X, _rect.Y, cornerRadius, cornerRadius, 180, 90);
-			path.AddArc(_rect.X + _rect.Width - cornerRadius, _rect.Y, cornerRadius, cornerRadius, 270, 90);
-			path.AddArc(_rect.X + _rect.Width - cornerRadius, _rect.Y + _rect.Height - cornerRadius, cornerRadius, cornerRadius, 0, 90);
-			path.AddArc(_rect.X, _rect.Y + _rect.Height - cornerRadius, cornerRadius, cornerRadius, 90, 90);
+			path.AddArc(_rect.X, _rect.Y, cornerDiameter, cornerDiameter, 180, 90);
+			path.AddArc(_rect.X + _rect.Width - cornerDiameter, _rect.Y, cornerDiameter, cornerDiameter, 270, 90);
+			path.AddArc(_rect.X + _rect.Width - cornerDiameter, _rect.Y + _rect.Height - cornerDiameter, cornerDiameter, cornerDiameter, 0, 90);
+			path.AddArc(_rect.X, _rect.Y + _rect.Height - cornerDiameter, cornerDiameter, cornerDiameter, 90, 90);
 			path.CloseAllFigures();
 
 			// ReSharper disable once AccessToDisposedClosure
@@ -326,13 +325,23 @@ namespace Microsoft.Maui.Graphics.GDI
 
 		public override void FillRoundedRectangle(float x, float y, float width, float height, float cornerRadius)
 		{
+			if (cornerRadius == 0)
+			{
+				FillRectangle(x, y, width, height);
+				return;
+			}
+
 			SetRect(x, y, width, height);
 
+			float minEdgeLength = Math.Min(_rect.Width, _rect.Height);
+			cornerRadius = Math.Min(cornerRadius, minEdgeLength / 2);
+			float cornerDiameter = cornerRadius * 2;
+
 			var path = new GraphicsPath();
-			path.AddArc(_rect.X, _rect.Y, cornerRadius, cornerRadius, 180, 90);
-			path.AddArc(_rect.X + _rect.Width - cornerRadius, _rect.Y, cornerRadius, cornerRadius, 270, 90);
-			path.AddArc(_rect.X + _rect.Width - cornerRadius, _rect.Y + _rect.Height - cornerRadius, cornerRadius, cornerRadius, 0, 90);
-			path.AddArc(_rect.X, _rect.Y + _rect.Height - cornerRadius, cornerRadius, cornerRadius, 90, 90);
+			path.AddArc(_rect.X, _rect.Y, cornerDiameter, cornerDiameter, 180, 90);
+			path.AddArc(_rect.X + _rect.Width - cornerDiameter, _rect.Y, cornerDiameter, cornerDiameter, 270, 90);
+			path.AddArc(_rect.X + _rect.Width - cornerDiameter, _rect.Y + _rect.Height - cornerDiameter, cornerDiameter, cornerDiameter, 0, 90);
+			path.AddArc(_rect.X, _rect.Y + _rect.Height - cornerDiameter, cornerDiameter, cornerDiameter, 90, 90);
 			path.CloseAllFigures();
 
 			Draw(g => g.FillPath(CurrentState.FillBrush, path));
@@ -457,7 +466,7 @@ namespace Microsoft.Maui.Graphics.GDI
 			CurrentState.NativeTranslate(tx, ty);
 		}
 
-		protected override void NativeConcatenateTransform(AffineTransform transform)
+		protected override void NativeConcatenateTransform(Matrix3x2 transform)
 		{
 			CurrentState.NativeConcatenateTransform(transform);
 		}
@@ -497,24 +506,38 @@ namespace Microsoft.Maui.Graphics.GDI
 				return;
 			}
 
-			/*
 			if (paint is LinearGradientPaint linearGradientPaint)
 			{
-				point1.X = x1;
-				point1.Y = y1;
-				point2.X = x2;
-				point2.Y = y2;
-				currentState.SetLinearGradient(paint, point1, point2);
+				float x1 = (float)(linearGradientPaint.StartPoint.X * rectangle.Width) + rectangle.X;
+				float y1 = (float)(linearGradientPaint.StartPoint.Y * rectangle.Height) + rectangle.Y;
+
+				float x2 = (float)(linearGradientPaint.EndPoint.X * rectangle.Width) + rectangle.X;
+				float y2 = (float)(linearGradientPaint.EndPoint.Y * rectangle.Height) + rectangle.Y;
+
+				Drawing.PointF point1 = new Drawing.PointF(x1, y1);
+				Drawing.PointF point2 = new Drawing.PointF(x2, y2);
+				Drawing.Color color1 = linearGradientPaint.StartColor.AsColor();
+				Drawing.Color color2 = linearGradientPaint.EndColor.AsColor();
+
+				CurrentState.SetFillLinear(point1, point2, color1, color2);
+
+				return;
 			}
-			else if(paint is RadialGradientPaint radialGradientPaint)
+
+			if (paint is RadialGradientPaint radialGradientPaint)
 			{
-				point1.X = x1;
-				point1.Y = y1;
-				point2.X = x2;
-				point2.Y = y2;
-				currentState.SetRadialGradient(paint, point1, point2);
+				float x1 = (float)((radialGradientPaint.Center.X - radialGradientPaint.Radius) * rectangle.Width) + rectangle.X;
+				float y1 = (float)((radialGradientPaint.Center.Y - radialGradientPaint.Radius) * rectangle.Height) + rectangle.Y;
+				float w = rectangle.Width * (float)radialGradientPaint.Radius * 2;
+				float h = rectangle.Height * (float)radialGradientPaint.Radius * 2;
+
+				GraphicsPath path = new GraphicsPath();
+				path.AddEllipse(x1, y1, w, h);
+				Drawing.Color color1 = radialGradientPaint.StartColor.AsColor();
+				Drawing.Color color2 = radialGradientPaint.EndColor.AsColor();
+
+				CurrentState.SetFillRadial(path, color1, color2);
 			}
-			*/
 		}
 
 		public override void SetToSystemFont()

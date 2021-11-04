@@ -3,6 +3,8 @@ using SharpDX.Direct2D1;
 using SharpDX.DirectWrite;
 using System;
 
+using NumericsMatrix3x2 = System.Numerics.Matrix3x2;
+
 namespace Microsoft.Maui.Graphics.SharpDX
 {
 	public class DXCanvasState : CanvasState
@@ -24,7 +26,6 @@ namespace Microsoft.Maui.Graphics.SharpDX
 		private RectangleF _fillRectangle;
 		private GradientStopCollection _gradientStopCollection;
 		private RectangleGeometry _layerBounds;
-		private RectangleGeometry _layerClipBounds;
 		private PathGeometry _layerMask;
 		private bool _needsStrokeStyle;
 		private float _scale;
@@ -85,7 +86,7 @@ namespace Microsoft.Maui.Graphics.SharpDX
 			ShadowOffset = prototype.ShadowOffset;
 			ShadowBlur = prototype.ShadowBlur;
 
-			Matrix = new Matrix3x2(prototype.Matrix.ToArray());
+			Matrix = prototype.Matrix;
 
 			FontName = prototype.FontName;
 			FontSize = prototype.FontSize;
@@ -436,10 +437,14 @@ namespace Microsoft.Maui.Graphics.SharpDX
 		public void CloseResources()
 		{
 			if (_layerMask != null)
-			{
-				_renderTarget.PopLayer();
-
-				_layerMask.Dispose();
+			{    
+				while (_layerCount > 0)    
+				{        
+					((DeviceContext)_renderTarget).PopLayer();        
+					_layerCount--;    
+				}    
+				
+				_layerMask.Dispose();    
 				_layerMask = null;
 			}
 
@@ -447,12 +452,6 @@ namespace Microsoft.Maui.Graphics.SharpDX
 			{
 				_layerBounds.Dispose();
 				_layerBounds = null;
-			}
-
-			if (_layerClipBounds != null)
-			{
-				_layerClipBounds.Dispose();
-				_layerClipBounds = null;
 			}
 		}
 
@@ -616,12 +615,10 @@ namespace Microsoft.Maui.Graphics.SharpDX
 			return Matrix;
 		}
 
-		public Matrix3x2 DxConcatenateTransform(AffineTransform transform)
+		public Matrix3x2 DxConcatenateTransform(NumericsMatrix3x2 transform)
 		{
-			var values = new float[6];
-			transform.GetMatrix(values);
-			Matrix = Matrix3x2.Multiply(Matrix, new Matrix3x2(values));
-			return Matrix;
+			var dxTransform = new Matrix3x2(transform.M11, transform.M12, transform.M21, transform.M22, transform.M31, transform.M32);
+			return Matrix = Matrix3x2.Multiply(Matrix, dxTransform);
 		}
 
 		public Matrix3x2 DxScale(float tx, float ty)
@@ -694,37 +691,97 @@ namespace Microsoft.Maui.Graphics.SharpDX
 			ClipPath(path, WindingMode.NonZero);
 		}
 
-		public void SubtractFromClip(float x, float y, float width, float height)
-		{
-			if (_layerMask != null)
-			{
-				throw new Exception("Only one subtraction currently supported.");
-			}
+		public void SubtractFromClip(EWPath path, float ppu)
+        {
+            var layerRect = new RectangleF(0, 0, _renderTarget.Size.Width, _renderTarget.Size.Height);
+            var toSubtract = path.AsDxPath(ppu, _renderTarget.Factory, FillMode.Alternate);
 
-			_layerMask = new PathGeometry(_renderTarget.Factory);
-			var maskSink = _layerMask.Open();
+            if (_layerMask != null)
+            {
+                ((DeviceContext)_renderTarget).PopLayer();
+                _layerCount--;
 
-			var layerRect = new global::SharpDX.RectangleF(0, 0, _renderTarget.Size.Width, _renderTarget.Size.Height);
-			_layerBounds = new RectangleGeometry(_renderTarget.Factory, layerRect);
+                var newLayerMask = new PathGeometry(_renderTarget.Factory);
+                var newMaskSync = newLayerMask.Open();
 
-			var boundsToSubtract = new global::SharpDX.RectangleF(x, y, width, height);
-			_layerClipBounds = new RectangleGeometry(_renderTarget.Factory, boundsToSubtract);
+                _layerMask.Combine(toSubtract, CombineMode.Exclude, newMaskSync);
+                newMaskSync.Close();
 
-			_layerBounds.Combine(_layerClipBounds, CombineMode.Exclude, maskSink);
-			maskSink.Close();
+                _layerMask.Dispose();
+                _layerMask = newLayerMask;
+            }
+            else
+            {
+                _layerMask = new PathGeometry(_renderTarget.Factory);
+                var maskSink = _layerMask.Open();
 
-			var layerParameters = new LayerParameters1
-			{
-				ContentBounds = layerRect,
-				MaskTransform = Matrix3x2.Identity,
-				MaskAntialiasMode = AntialiasMode.PerPrimitive,
-				Opacity = 1,
-				GeometricMask = _layerMask
-			};
+                _layerBounds = new RectangleGeometry(_renderTarget.Factory, layerRect);
 
-			((DeviceContext) _renderTarget).PushLayer(layerParameters, null);
-			_layerCount++;
-		}
+                _layerBounds.Combine(toSubtract, CombineMode.Exclude, maskSink);
+                maskSink.Close();
+            }
+
+            toSubtract.Dispose();
+
+            var layerParameters = new LayerParameters1
+            {
+                ContentBounds = layerRect,
+                MaskTransform = Matrix3x2.Identity,
+                MaskAntialiasMode = AntialiasMode.PerPrimitive,
+                Opacity = 1,
+                GeometricMask = _layerMask
+            };
+
+            ((DeviceContext)_renderTarget).PushLayer(layerParameters, null);
+            _layerCount++;
+        }
+
+        public void SubtractFromClip(float x, float y, float width, float height)
+        {
+            var layerRect = new RectangleF(0, 0, _renderTarget.Size.Width, _renderTarget.Size.Height);
+            var boundsToSubtract = new RectangleF(x, y, width, height);
+            var toSubtract = new RectangleGeometry(_renderTarget.Factory, boundsToSubtract);
+
+            if (_layerMask != null)
+            {
+                ((DeviceContext)_renderTarget).PopLayer();
+                _layerCount--;
+
+                var newLayerMask = new PathGeometry(_renderTarget.Factory);
+                var newMaskSync = newLayerMask.Open();
+
+                _layerMask.Combine(toSubtract, CombineMode.Exclude, newMaskSync);
+                newMaskSync.Close();
+
+                _layerMask.Dispose();
+                _layerMask = newLayerMask;
+            }
+            else
+            {
+                _layerMask = new PathGeometry(_renderTarget.Factory);
+                var maskSink = _layerMask.Open();
+
+                _layerBounds = new RectangleGeometry(_renderTarget.Factory, layerRect);
+
+                _layerBounds.Combine(toSubtract, CombineMode.Exclude, maskSink);
+                maskSink.Close();
+
+            }
+
+            toSubtract.Dispose();
+
+            var layerParameters = new LayerParameters1
+            {
+                ContentBounds = layerRect,
+                MaskTransform = Matrix3x2.Identity,
+                MaskAntialiasMode = AntialiasMode.PerPrimitive,
+                Opacity = 1,
+                GeometricMask = _layerMask
+            };
+
+            ((DeviceContext)_renderTarget).PushLayer(layerParameters, null);
+            _layerCount++;
+        }
 
 		public void SetBitmapBrush(Brush bitmapBrush)
 		{

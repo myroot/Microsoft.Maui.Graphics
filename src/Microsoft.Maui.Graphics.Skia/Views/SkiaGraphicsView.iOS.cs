@@ -1,5 +1,5 @@
 using System;
-using Microsoft.Maui.Graphics.CoreGraphics;
+using Microsoft.Maui.Graphics.Native;
 using Microsoft.Maui.Graphics.Skia;
 using SkiaSharp.Views.iOS;
 
@@ -28,7 +28,7 @@ namespace Microsoft.Maui.Graphics.Skia.Views
 			}
 		}
 
-		private void Invalidate()
+		public void Invalidate()
 		{
 			if (Handle == IntPtr.Zero)
 				return;

@@ -1,4 +1,6 @@
 using System;
+using System.Numerics;
+
 using Microsoft.Maui.Graphics.Text;
 using SkiaSharp;
 
@@ -292,7 +294,11 @@ namespace Microsoft.Maui.Graphics.Skia
 				_shader = null;
 			}
 
-			if (paint is LinearGradientPaint linearGradientPaint)
+			if (paint is SolidPaint solidPaint)
+			{
+				FillColor = solidPaint.Color;
+			}
+			else if (paint is LinearGradientPaint linearGradientPaint)
 			{
 				float x1 = (float)(linearGradientPaint.StartPoint.X * rectangle.Width) + rectangle.X;
 				float y1 = (float)(linearGradientPaint.StartPoint.Y * rectangle.Height) + rectangle.Y;
@@ -830,7 +836,7 @@ namespace Microsoft.Maui.Graphics.Skia
 			_canvas.Translate(tx * CurrentState.ScaleX, ty * CurrentState.ScaleY);
 		}
 
-		protected override void NativeConcatenateTransform(AffineTransform transform)
+		protected override void NativeConcatenateTransform(Matrix3x2 transform)
 		{
 			var matrix = new SKMatrix();
 

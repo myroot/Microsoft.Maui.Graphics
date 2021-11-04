@@ -1,17 +1,20 @@
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
+using System.Numerics;
 
 namespace Microsoft.Maui.Graphics
 {
 	[DebuggerDisplay("X={X}, Y={Y}")]
+	[TypeConverter(typeof(Converters.PointFTypeConverter))]
 	public partial struct PointF
 	{
 		public float X { get; set; }
 
 		public float Y { get; set; }
 
-		public static PointF Zero = new PointF();
+		public static readonly PointF Zero = new PointF();
 
 		public override string ToString()
 		{
@@ -28,6 +31,12 @@ namespace Microsoft.Maui.Graphics
 		{
 			X = sz.Width;
 			Y = sz.Height;
+		}
+
+		public PointF(Vector2 v)
+		{
+			X = v.X;
+			Y = v.Y;
 		}
 
 		public override bool Equals(object o)
@@ -58,6 +67,11 @@ namespace Microsoft.Maui.Graphics
 			p.X += dx;
 			p.Y += dy;
 			return p;
+		}
+
+		public PointF TransformBy(in Matrix3x2 transform)
+		{
+			return Vector2.Transform((Vector2)this, transform);
 		}
 
 		public PointF Round()
@@ -103,5 +117,26 @@ namespace Microsoft.Maui.Graphics
 			y = Y;
 		}
 		public static implicit operator Point(PointF p) => new Point(p.X, p.Y);
+
+		public static implicit operator PointF(Vector2 v) => new PointF(v);
+
+		public static explicit operator Vector2(PointF p) => new Vector2(p.X, p.Y);
+
+		public static bool TryParse(string value, out PointF pointF)
+		{
+			if (!string.IsNullOrEmpty(value))
+			{
+				string[] xy = value.Split(',');
+				if (xy.Length == 2 && float.TryParse(xy[0], NumberStyles.Number, CultureInfo.InvariantCulture, out var x)
+					&& float.TryParse(xy[1], NumberStyles.Number, CultureInfo.InvariantCulture, out var y))
+				{
+					pointF = new PointF(x, y);
+					return true;
+				}
+			}
+
+			pointF = default;
+			return false;
+		}
 	}
 }

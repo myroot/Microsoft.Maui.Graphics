@@ -1,5 +1,7 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Numerics;
+
 using Drawing = System.Drawing;
 
 namespace Microsoft.Maui.Graphics.GDI
@@ -16,7 +18,10 @@ namespace Microsoft.Maui.Graphics.GDI
 		private Pen _strokePen;
 		private GraphicsState _state;
 
-		private SolidBrush _fillBrush;
+		private SolidBrush _fillBrushSolid;
+		private LinearGradientBrush _fillBrushLinear;
+		private PathGradientBrush _fillBrushRadial;
+		private Brush _activeBrush;
 
 		private SolidBrush _textBrush;
 		private Font _font;
@@ -131,22 +136,55 @@ namespace Microsoft.Maui.Graphics.GDI
 
 		public Drawing.Color StrokeColor { get; set; }
 
-		public Drawing.Color FillColor { get; set; }
+		private Drawing.Color _fillColor;
+		public Drawing.Color FillColor
+		{
+			get => _fillColor;
+			set
+			{
+				_fillColor = value;
+				SetFillSolid(value);
+			}
+		}
+
+		public void SetFillSolid(Drawing.Color color)
+		{
+			if (_fillBrushSolid is null)
+				_fillBrushSolid = new SolidBrush(Drawing.Color.White);
+
+			_fillBrushSolid.Color = color;
+
+			_activeBrush = _fillBrushSolid;
+		}
+
+		public void SetFillLinear(Drawing.PointF point1, Drawing.PointF point2, Drawing.Color color1, Drawing.Color color2)
+		{
+			_fillBrushLinear?.Dispose();
+			_fillBrushLinear = new LinearGradientBrush(point1, point2, color1, color2);
+
+			_activeBrush = _fillBrushLinear;
+		}
+
+		public void SetFillRadial(GraphicsPath path, Drawing.Color center, Drawing.Color surround)
+		{
+			_fillBrushRadial?.Dispose();
+			_fillBrushRadial = new PathGradientBrush(path)
+			{
+				CenterColor = center,
+				SurroundColors = new Drawing.Color[] { surround }
+			};
+
+			_activeBrush = _fillBrushRadial;
+		}
 
 		public Brush FillBrush
 		{
 			get
 			{
-				if (_fillBrush == null)
-				{
-					_fillBrush = new SolidBrush(FillColor);
-				}
-				else
-				{
-					_fillBrush.Color = FillColor;
-				}
+				if (_activeBrush is null)
+					SetFillSolid(FillColor);
 
-				return _fillBrush;
+				return _activeBrush;
 			}
 		}
 
@@ -230,10 +268,22 @@ namespace Microsoft.Maui.Graphics.GDI
 				_strokePen = null;
 			}
 
-			if (_fillBrush != null)
+			if (_fillBrushSolid != null)
 			{
-				_fillBrush.Dispose();
-				_fillBrush = null;
+				_fillBrushSolid.Dispose();
+				_fillBrushSolid = null;
+			}
+
+			if (_fillBrushLinear != null)
+			{
+				_fillBrushLinear.Dispose();
+				_fillBrushLinear = null;
+			}
+
+			if (_fillBrushRadial != null)
+			{
+				_fillBrushRadial.Dispose();
+				_fillBrushRadial = null;
 			}
 
 			if (_textBrush != null)
@@ -325,12 +375,10 @@ namespace Microsoft.Maui.Graphics.GDI
 			_graphics.TranslateTransform(-x, -y);
 		}
 
-		public void NativeConcatenateTransform(AffineTransform transform)
-		{
-			_scale *= transform.ScaleX;
-			var values = new float[6];
-			transform.GetMatrix(values);
-			var transformMatrix = new Matrix(values[0], values[1], values[2], values[3], values[4], values[5]);
+		public void NativeConcatenateTransform(Matrix3x2 transform)
+		{			
+			_scale *= GetLengthScale(transform);
+			var transformMatrix = new Matrix(transform.M11, transform.M12, transform.M21, transform.M22, transform.M31, transform.M32);
 			_graphics.MultiplyTransform(transformMatrix);
 		}
 	}

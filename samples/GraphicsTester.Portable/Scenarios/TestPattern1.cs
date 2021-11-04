@@ -4,7 +4,7 @@ namespace GraphicsTester.Scenarios
 {
 	public class TestPattern1 : AbstractScenario
 	{
-		public TestPattern1() : base(720, 1024)
+		public TestPattern1() : base(2000, 1500)
 		{
 		}
 
